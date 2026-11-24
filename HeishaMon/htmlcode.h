@@ -80,7 +80,7 @@ static const char websocketJS[] PROGMEM =
   "             if (jsonObject.data.hasOwnProperty('stats')) {"
   "              const elementwifi = document.getElementById(`wifi`);"
   "              if (elementwifi) {"
-  "                elementwifi.textContent = jsonObject.data.stats.wifi;"
+  "                elementwifi.textContent = (jsonObject.data.stats.wifi_text && jsonObject.data.stats.wifi_text.length) ? jsonObject.data.stats.wifi_text : ((typeof jsonObject.data.stats.wifi === 'number' && jsonObject.data.stats.wifi >= 0) ? (jsonObject.data.stats.wifi + '%') : 'Not connected');" 
   "              }"
   "              const elementeth = document.getElementById(`ethernet`);"
   "              if (elementeth) {"
@@ -405,11 +405,11 @@ static const char webBodyRootConsoleTab[] PROGMEM = "<button class=\"w3-bar-item
 
 static const char webBodyEndDiv[] PROGMEM = "</div>";
 
-static const char webBodyRootStatusWifi[] PROGMEM =   "<div class=\"w3-container w3-left\"><br>Wifi signal: <span id=\"wifi\">";
+static const char webBodyRootStatusWifi[] PROGMEM =   "<div class=\"w3-container w3-left\"><br>WiFi: <span id=\"wifi\">";
 #ifdef ESP8266
-static const char webBodyRootStatusMemory[] PROGMEM =   "</span>%<br>Memory free: <span id=\"memory\">";
+static const char webBodyRootStatusMemory[] PROGMEM =   "</span><br>Memory free: <span id=\"memory\">";
 #else
-static const char webBodyRootStatusEthernet[] PROGMEM =   "</span>%<br>Ethernet status: <span id=\"ethernet\">";
+static const char webBodyRootStatusEthernet[] PROGMEM =   "</span><br>Ethernet: <span id=\"ethernet\">";
 static const char webBodyRootStatusMemory[] PROGMEM =   "</span><br>Memory free: <span id=\"memory\">";
 #endif
 static const char webBodyRootStatusReceived[] PROGMEM =  "</span>%<br>Correct received data: <span id=\"correct\">";
@@ -1107,6 +1107,13 @@ static const char settingsForm2[] PROGMEM =
   "          <input type=\"checkbox\" name=\"hotspot\" value=\"enabled\">"
   "        </td>"
   "      </tr>"
+  "      <tr>"
+  "        <td style=\"text-align:right; width: 50%\">"
+  "          Disable WiFi when Ethernet is connected:</td>"
+  "        <td style=\"text-align:left\">"
+  "          <input type=\"checkbox\" name=\"disable_wifi_when_eth_connected\" value=\"enabled\">"
+  "        </td>"
+  "      </tr>"  
   "        <td style=\"text-align:right; width: 50%\">"
   "          Debug log to MQTT topic from start:</td>"
   "        <td style=\"text-align:left\">"
@@ -1387,7 +1394,7 @@ static const char showFirmwarePage[] PROGMEM =
   "   <form method=\"POST\" action=\"\" enctype=\"multipart/form-data\">"
   "       <h2>Firmware:</h2>"
   "       <input type=\"file\" accept=\".bin,.bin.gz\" id=\"firmware\" name=\"firmware\" onchange=\"getMD5();\"><br><br>"
-  "       <label for=\"md5\">MD5 checksum:</label><input type=\"text\" id=\"md5\" name=\"md5\" value=\"\" size=\"32\" minlength=\"32\" maxlength=\"32\"><br><br><b>Warning</b><br>If you leave the MD5 checksum empty there will be no check on the uploaded firmware which could cause a bricked HeishaMon!<br>In this case but also other unforseen errors during update requires you to be able to restore the firmware using a TTL cable!<br><br>"
+  "       <label for=\"md5\">MD5 checksum:</label><input type=\"text\" id=\"md5\" name=\"md5\" value=\"\" size=\"32\" minlength=\"32\" maxlength=\"32\"><br><br><b>Warning</b><br>If you leave the MD5 checksum empty, there will be no check on the uploaded firmware - which could cause a bricked HeishaMon!<br>In this case (and other potential unforeseen errors during update) you would need to restore the firmware using a TTL cable!<br><br>"
   "   </form>"
   "   <button id=\"updatebutton\" onclick=\"uploadFile()\">Update Firmware</button><br><progress id=\"progressBar\" value=\"0\" max=\"100\" style=\"width:300px;\"></progress><p id=\"status\"></p>"
   "</div>";

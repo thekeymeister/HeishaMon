@@ -57,6 +57,7 @@ struct settingsStruct {
   bool hotspot = true; //enable wifi hotspot when wifi is not connected
 #ifdef ESP32
   bool proxy = true; //cztaw proxy port enable flag
+  bool disable_wifi_when_eth_connected = false;  //disable wifi connection when eth connected
 #endif
   s0SettingsStruct s0Settings[NUM_S0_COUNTERS];
   gpioSettingsStruct gpioSettings;

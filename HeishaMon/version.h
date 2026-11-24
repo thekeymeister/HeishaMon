@@ -1,2 +1,1 @@
-static const char* heishamon_version = "3.9";
-
+static const char *heishamon_version = "Local-alpha0.7";

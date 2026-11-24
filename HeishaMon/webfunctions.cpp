@@ -228,6 +228,7 @@ void loadSettings(settingsStruct *heishamonSettings) {
           heishamonSettings->opentherm = ( jsonDoc["opentherm"] == "enabled" ) ? true : false;
 #ifdef ESP32          
           heishamonSettings->proxy = ( jsonDoc["proxy"] == "enabled" ) ? true : false;
+		  heishamonSettings->disable_wifi_when_eth_connected = ( jsonDoc["disable_wifi_when_eth_connected"] == "enabled" ) ? true : false;
 #endif          
           if ( jsonDoc["waitTime"]) heishamonSettings->waitTime = jsonDoc["waitTime"];
           if (heishamonSettings->waitTime < 5) heishamonSettings->waitTime = 5;
@@ -450,6 +451,11 @@ void settingsToJson(JsonDocument &jsonDoc, settingsStruct *heishamonSettings) {
   } else {
     jsonDoc["proxy"] = "disabled";
   }
+  if (heishamonSettings->disable_wifi_when_eth_connected) {
+    jsonDoc["disable_wifi_when_eth_connected"] = "enabled";
+  } else {
+    jsonDoc["disable_wifi_when_eth_connected"] = "disabled";
+  }
 #endif 
   jsonDoc["waitTime"] = heishamonSettings->waitTime;
   jsonDoc["waitDallasTime"] = heishamonSettings->waitDallasTime;
@@ -492,6 +498,7 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
 
 #ifdef ESP32  
   jsonDoc["proxy"] = String("disabled");
+  jsonDoc["disable_wifi_when_eth_connected"] = String("disabled");
 #endif  
   jsonDoc["use_1wire"] = String("disabled");
   jsonDoc["use_s0"] = String("disabled");
@@ -536,6 +543,8 @@ int saveSettings(struct webserver_t *client, settingsStruct *heishamonSettings) 
 #ifdef ESP32      
     } else if (strcmp(tmp->name.c_str(), "proxy") == 0) {
       jsonDoc["proxy"] = tmp->value;
+    } else if (strcmp(tmp->name.c_str(), "disable_wifi_when_eth_connected") == 0) {
+      jsonDoc["disable_wifi_when_eth_connected"] = tmp->value;	  
 #endif      
     } else if (strcmp(tmp->name.c_str(), "ntp_servers") == 0) {
       jsonDoc["ntp_servers"] = tmp->value;
@@ -831,6 +840,9 @@ int getSettings(struct webserver_t *client, settingsStruct *heishamonSettings) {
         webserver_send_content_P(client, PSTR(",\"proxy\":"), 9);
         itoa(heishamonSettings->proxy, str, 10);
         webserver_send_content(client, str, strlen(str));
+        webserver_send_content_P(client, PSTR(",\"disable_wifi_when_eth_connected\":"), 35);
+        itoa(heishamonSettings->disable_wifi_when_eth_connected, str, 10);
+        webserver_send_content(client, str, strlen(str));
 #endif      
         webserver_send_content_P(client, PSTR(",\"use_1wire\":"), 13);
         itoa(heishamonSettings->use_1wire, str, 10);
@@ -1038,34 +1050,58 @@ int handleRoot(struct webserver_t *client, float readpercentage, int mqttReconne
         }
         webserver_send_content_P(client, webBodyRootConsoleTab, strlen_P(webBodyRootConsoleTab));
       } break;
-    case 2: {
-        webserver_send_content_P(client, webBodyEndDiv, strlen_P(webBodyEndDiv));
-        webserver_send_content_P(client, webBodyRootStatusWifi, strlen_P(webBodyRootStatusWifi));
-        char str[200];
-        itoa(getWifiQuality(), str, 10);
-        webserver_send_content(client, (char *)str, strlen(str));
-#ifdef ESP32
-        webserver_send_content_P(client, webBodyRootStatusEthernet, strlen_P(webBodyRootStatusEthernet));
-        if (ETH.phyAddr() != 0) {        
-          if (ETH.connected()) {
-            if (ETH.hasIP()) {
-              webserver_send_content_P(client, PSTR("connected - IP: "), 16);
-              char ipaddress[30];
-              ETH.localIP().toString().toCharArray(ipaddress,30);
-              webserver_send_content(client, ipaddress, strlen(ipaddress));              
-              
-            } else {
-              webserver_send_content_P(client, PSTR("connected - no IP"), 17);
-            }
-          } 
-          else {
-            webserver_send_content_P(client, PSTR("not connected"), 13);
-          }
-        } else {
-          webserver_send_content_P(client, PSTR("not installed"), 13);
-        }
-#endif
-      } break;
+	case 2: {
+		webserver_send_content_P(client, webBodyEndDiv, strlen_P(webBodyEndDiv));
+
+		// --- WiFi status ---
+		webserver_send_content_P(client, webBodyRootStatusWifi, strlen_P(webBodyRootStatusWifi));
+		{
+		  bool wifiUp = (WiFi.status() == WL_CONNECTED) && WiFi.localIP();
+		#ifdef ESP32
+		  bool policyActive =
+			  heishamonSettings->disable_wifi_when_eth_connected &&
+			  ETH.connected() && (ETH.localIP() != IPAddress(0,0,0,0));
+		#else
+		  bool policyActive = false;
+		#endif
+
+		  if (policyActive) {
+			webserver_send_content_P(client, PSTR("Disabled (Ethernet connected)"), strlen_P(PSTR("Disabled (Ethernet connected)")));
+		  } else if (wifiUp) {
+			int32_t rssi = WiFi.RSSI();
+			int quality  = getWifiQuality();
+			char ipbuf[32]; WiFi.localIP().toString().toCharArray(ipbuf, sizeof(ipbuf));
+			char line[128];
+			snprintf(line, sizeof(line), "Connected (RSSI %ddB / %d%%) - IP: %s", (int)rssi, quality, ipbuf);
+			webserver_send_content(client, line, strlen(line));
+		  } else {
+			webserver_send_content_P(client, PSTR("Not connected"), strlen_P(PSTR("Not connected")));
+		  }
+		}
+		#ifdef ESP32
+		// --- Ethernet status ---
+		webserver_send_content_P(client, webBodyRootStatusEthernet, strlen_P(webBodyRootStatusEthernet));
+		{
+		if (ETH.phyAddr() != 0) {                // module present?
+		  if (ETH.connected()) {                 // link up?
+			// Prefer localIP() check; equivalent to hasIP() for our purpose
+			if (ETH.localIP()) {
+			  webserver_send_content_P(client, PSTR("Connected - IP "), strlen_P(PSTR("Connected - IP ")));
+			  char ipaddress[32];
+			  ETH.localIP().toString().toCharArray(ipaddress, sizeof(ipaddress));
+			  webserver_send_content(client, ipaddress, strlen(ipaddress));
+			} else {
+			  webserver_send_content_P(client, PSTR("Connected - no IP"), strlen_P(PSTR("Connected - no IP")));
+			}
+		  } else {
+			webserver_send_content_P(client, PSTR("Not connected"), strlen_P(PSTR("Not connected")));
+		  }
+		} else {
+		  webserver_send_content_P(client, PSTR("Not installed"), strlen_P(PSTR("Not installed")));
+		}
+		}
+		#endif
+	  } break;
     case 3: {
         webserver_send_content_P(client, webBodyRootStatusMemory, strlen_P(webBodyRootStatusMemory));
         char str[200];
